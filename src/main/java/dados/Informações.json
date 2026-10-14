@@ -1,0 +1,72 @@
+[
+  {
+    "nome": "Textil Sao Paulo",
+    "local": "Avenida Tiete 456",
+    "detalhes": "Descarte irregular de corantes quimicos diretamente no rio",
+    "nivelPoluicao": 1,
+    "imagem": "./textil_corante.jpg"
+  },
+  {
+    "nome": "Metalurgica Aco Forte",
+    "local": "Rodovia Indio Tibirica 890",
+    "detalhes": "Vazamento de metais pesados no solo e lencol freatico",
+    "nivelPoluicao": 2,
+    "imagem": "./vazamento_metais.png"
+  },
+  {
+    "nome": "Frigorifico Boi Gordo",
+    "local": "Rua das Cachoeiras 12",
+    "detalhes": "Efluentes organicos sem tratamento sendo despejados",
+    "nivelPoluicao": 0,
+    "imagem": "./efluentes_frigorifico.jpg"
+  },
+  {
+    "nome": "Quimica Polo ABC",
+    "local": "Estrada do Povao 77",
+    "detalhes": "Emissao de gases toxicos e residuo liquido suspeito",
+    "nivelPoluicao": 1,
+    "imagem": "./quimica_tiete.jpg"
+  },
+  {
+    "nome": "Tintas Aquarela",
+    "local": "Avenida Guarulhos 500",
+    "detalhes": "Lavagem de tanques com tinta escorrendo para o bueiro",
+    "nivelPoluicao": 0,
+    "imagem": "./tintas_lavagem.png"
+  },
+  {
+    "nome": "Usina de Asfalto SP",
+    "local": "Rodovia Ayrton Senna Km 30",
+    "detalhes": "Fuligem e oleo vazando para o corrego afluente",
+    "nivelPoluicao": 0,
+    "imagem": "./oleo_asfalto.jpg"
+  },
+  {
+    "nome": "Celulose Papel Max",
+    "local": "Rua das Industrias 200",
+    "detalhes": "Descarte de soda caustica apos processamento de papel",
+    "nivelPoluicao": 2,
+    "imagem": "./celulose_soda.jpg"
+  },
+  {
+    "nome": "Curtume Pele Boa",
+    "local": "Estrada Velha 88",
+    "detalhes": "Forte odor e descarte de cromo no leito do rio",
+    "nivelPoluicao": 1,
+    "imagem": "./curtume_cromo.png"
+  },
+  {
+    "nome": "Plasticos Nova Era",
+    "local": "Rua Marginal Tiete 1500",
+    "detalhes": "Microplasticos e resina encontrados na tubulacao de saida",
+    "nivelPoluicao": 0,
+    "imagem": "./microplasticos.jpg"
+  },
+  {
+    "nome": "Montadora Auto Pecas",
+    "local": "Avenida do Estado 321",
+    "detalhes": "Residuos de graxa e oleo lubrificante no sistema de drenagem",
+    "nivelPoluicao": 0,
+    "imagem": "./graxa_auto.jpg"
+  }
+]
