@@ -5,11 +5,11 @@ import Server.entity.enums.NiveisPoluicao;
 import java.io.File;
 import java.io.Serializable;
 
-public class Industrias  implements Serializable {
+public class Industria implements Serializable {
 
     private String nome;
     private String local;
-    private String Detalhes;
+    private String detalhes;
     private NiveisPoluicao nivelPoluicao;
     private File imagem;
 
@@ -30,11 +30,11 @@ public class Industrias  implements Serializable {
     }
 
     public String getDetalhes() {
-        return Detalhes;
+        return detalhes;
     }
 
     public void setDetalhes(String detalhes) {
-        Detalhes = detalhes;
+        this.detalhes = detalhes;
     }
 
     public NiveisPoluicao getNivelPoluicao() {
@@ -51,5 +51,14 @@ public class Industrias  implements Serializable {
 
     public void setImagem(File imagem) {
         this.imagem = imagem;
+    }
+
+    @Override
+    public String toString() {
+        return "Nome = " + nome + '\n' +
+                "Local = " + local + '\n' +
+                "Detalhes = " + detalhes + '\n' +
+                "Nivel Poluicao = " + nivelPoluicao.toString() + '\n' +
+                "imagem = " + imagem;
     }
 }
