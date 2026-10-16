@@ -61,7 +61,13 @@
 }, {
   "nome" : "Teste",
   "local" : "Teste",
-  "detalhes" : "Teste",
-  "nivelPoluicao" : 1,
+  "detalhes" : "",
+  "nivelPoluicao" : 0,
+  "imagem" : "vazio"
+}, {
+  "nome" : "Teste1",
+  "local" : "Teste1",
+  "detalhes" : "",
+  "nivelPoluicao" : 0,
   "imagem" : "vazio"
 } ]

@@ -1,6 +1,7 @@
 package Server.entity;
 
 import Server.entity.enums.NiveisPoluicao;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import java.io.File;
 import java.io.Serializable;
@@ -11,6 +12,7 @@ public class Industria implements Serializable {
     private String local;
     private String detalhes;
     private NiveisPoluicao nivelPoluicao;
+    private String nomeImagem;
     private File imagem;
 
     public String getNome() {
@@ -51,6 +53,21 @@ public class Industria implements Serializable {
 
     public void setImagem(File imagem) {
         this.imagem = imagem;
+    }
+
+    public String getNomeImagem() {
+        return nomeImagem;
+    }
+
+    public void setNomeImagem(String nomeImagem) {
+        this.nomeImagem = nomeImagem;
+    }
+
+    public boolean validarCampos(){
+        if(nome.isEmpty() || local.isEmpty() || detalhes.isEmpty() || nivelPoluicao == null){
+            return false;
+        }
+        return true;
     }
 
     @Override

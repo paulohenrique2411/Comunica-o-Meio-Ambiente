@@ -13,8 +13,6 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -22,6 +20,7 @@ import java.util.Set;
 
 public class ServerService implements AutoCloseable {
 
+    private String arquivoInfo = "Informacoes.json";
     private String diretorio;
     private static int PORTA = 8080;
     private Selector selector;
@@ -52,7 +51,7 @@ public class ServerService implements AutoCloseable {
     }
 
     public void carregarIndustrias(){
-        try(FileReader file = new FileReader(diretorio)){
+        try(FileReader file = new FileReader(diretorio + arquivoInfo)){
 
             ObjectMapper mapper = new ObjectMapper();
 
@@ -95,8 +94,7 @@ public class ServerService implements AutoCloseable {
                             "Para solicitar mais informações siga esse padrão: \n" +
                             "Consultar {nome da industria} \n" +
                             "Para cadastrar mais industrias siga esse padrão: \n"+
-                            "Cadastrar {nome da industria} {local} {detalhes} \n " +
-                            "{NivelPoluicao digite Baixo ou MEDIO ou ALTO} {imagem diretório (opcional)}";
+                            "Cadastrar Nome:{Instituição} Local:{local} Detalhes:{detalhes} NivelPoluição:{nivelpoluição} Imagem:{imagem}";
 
                     enviarMensagem(mensagem,clientChannel);
 
@@ -104,9 +102,7 @@ public class ServerService implements AutoCloseable {
 
                         SocketChannel clientChannel = (SocketChannel) key.channel();
 
-                        String mensagem = receberMensagem(clientChannel);
-
-                        verificaRequisicao(mensagem, clientChannel);
+                        verificaRequisicao(clientChannel);
                     }
 
                 }
@@ -117,35 +113,49 @@ public class ServerService implements AutoCloseable {
             e.printStackTrace();
         }catch (InterruptedException e){
             e.printStackTrace();
+        }catch (ClassNotFoundException e){
+            e.printStackTrace();
         }
     }
 
-    public void verificaRequisicao(String mensagem, SocketChannel client){
+    public void verificaRequisicao(SocketChannel client) throws ClassNotFoundException, IOException {
 
-        if(mensagem.contains("Consultar")){
+
+        try{
+            String mensagem = receberMensagem(client);
             String[] nome = mensagem.split(" ");
-            Industria  industria = consultaIndustria(nome[1]);
-            if(industria.equals(null)){
+            Industria industria = consultaIndustria(nome[1]);
+            File file = new File(diretorio + industria.getNomeImagem());
+            industria.setImagem(file);
+
+            if (industria.equals(null)) {
                 enviarMensagem("Não foi possivel achar uma industria com os dados fornecidos.", client);
-            }else{
-                enviarMensagem(industria.toString(), client);
+            } else {
+                enviarIndustria(industria, client);
             }
-        } else if (mensagem.contains("Cadastrar")) {
-            String[] dados = mensagem.split(" ");
-            Industria novaIndustria = new Industria();
-            novaIndustria.setNome(dados[1]);
-            novaIndustria.setLocal(dados[2]);
-            novaIndustria.setDetalhes(dados[3]);
-            novaIndustria.setNivelPoluicao(NiveisPoluicao.valueOf(dados[4].toUpperCase()));
-            cadastrarIndustria(novaIndustria);
+        }catch (IOException e){
+            Industria industria = receberIndustria(client);
+
+            if (industria.validarCampos()){
+                enviarMensagem("Não foi possivel realizar o cadastro, um dos campos estava vazio", client);
+            }
+            cadastrarIndustria(industria);
             enviarMensagem("Cadastro realizado com sucesso", client);
         }
 
     }
 
+    public String obterValor(String valor, String mensagem){
+        if(mensagem.contains(valor)){
+            int index = mensagem.indexOf(valor);
+            return mensagem.substring(index+valor.length()+1, (mensagem.indexOf(" ", index) == -1)? mensagem.length() : mensagem.indexOf(" ", index) );
+        }
+        return "";
+    }
+
     public void cadastrarIndustria(Industria industria){
 
-            File file = new File(diretorio);
+            File file = new File(diretorio + arquivoInfo);
 
             ObjectMapper mapper = new ObjectMapper();
 
@@ -165,7 +175,7 @@ public class ServerService implements AutoCloseable {
                 novaIndustria.put("local", industria.getLocal());
                 novaIndustria.put("detalhes", industria.getDetalhes());
                 novaIndustria.put("nivelPoluicao", industria.getNivelPoluicao().ordinal());
-                novaIndustria.put("imagem", "vazio");
+                novaIndustria.put("imagem", industria.getNomeImagem());
 
                 listaIndustrias.add(novaIndustria);
 
@@ -182,7 +192,7 @@ public class ServerService implements AutoCloseable {
         return industrias.stream().filter(c -> c.getNome().contains(nome)).findFirst().orElse(null);
     }
     public String receberMensagem(SocketChannel client) throws IOException {
-        try{
+
             ByteBuffer responseBuffer = ByteBuffer.allocate(1024);
 
             int byteRead = client.read(responseBuffer);
@@ -198,18 +208,33 @@ public class ServerService implements AutoCloseable {
             }
 
 
-        }catch (IOException e){
-            e.printStackTrace();
-                client.close();
-        }
-
-        return null;
+        return "";
     }
 
     public void enviarMensagem(String mensagem, SocketChannel client){
         try {
             ByteBuffer outBuffer = ByteBuffer.wrap((mensagem).getBytes());
             client.write(outBuffer);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public Industria receberIndustria(SocketChannel client) throws IOException, ClassNotFoundException {
+
+        InputStream inStream = Channels.newInputStream(client);
+        ObjectInputStream in = new ObjectInputStream(inStream);
+
+        return (Industria) in.readObject();
+    }
+
+    public void enviarIndustria(Industria industria, SocketChannel client){
+        try {
+            OutputStream outputStream = Channels.newOutputStream(client);
+            ObjectOutputStream out = new ObjectOutputStream(outputStream);
+
+            out.writeObject(industria);
+            out.flush();
         } catch (IOException e) {
             e.printStackTrace();
         }

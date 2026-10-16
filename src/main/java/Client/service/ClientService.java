@@ -1,10 +1,15 @@
 package Client.service;
 
-import java.io.IOException;
+import Server.entity.Industria;
+import javafx.application.Platform;
+import javafx.scene.control.Label;
+
+import java.io.*;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
@@ -22,7 +27,8 @@ public class ClientService implements  AutoCloseable{
             socketChannel = SocketChannel.open();
 
             if(!socketChannel.isOpen()){
-                System.out.println("Não foi possivel estabelecer conexão com o Servidor da Secretária");
+                System.out.println("Não foi possivel estabelecer conexão");
+                return;
             }
 
             socketChannel.connect(new InetSocketAddress(InetAddress.getLocalHost().getHostAddress().toString(),PORTA));
@@ -38,38 +44,35 @@ public class ClientService implements  AutoCloseable{
         }
     }
 
-    public void run(){
 
-        Scanner sc = new Scanner(System.in);
-
-        escutarServidor();
-
-        while (true){
-
-            System.out.print("Digite a mensagem que deseja enviar: ");
-            String mensagem = sc.nextLine();
-            enviarMensagem(mensagem);
-
-            if(mensagem.equals("sair")) break;
-
-        }
-
-
-    }
-
-    public void escutarServidor(){
+    public void escutarServidor(Label label){
         Thread threadEscuta = new Thread( () -> {
 
             try{
                 while (true){
                     Thread.sleep(1000);
-                    String mensagem = receberMensagem();
-                    if(mensagem.isEmpty()) continue;
-                    System.out.println("\nMensagem recebida: " + mensagem + "\n");
+
+                    try {
+                        String mensagem = receberMensagem();
+                        if(mensagem.isEmpty()) continue;
+                        Platform.runLater(() -> {
+                            label.setText(label.getText() + "\n======Mensagem recebida======\n" + mensagem + "\n");
+                        });
+                    }catch (IOException e){
+                        Industria industria = receberIndustria();
+                        Platform.runLater(() -> {
+                            label.setText(label.getText() + "\n======Mensagem recebida======\n" + industria.toString() + "\n");
+                        });
+                    }
+
+
+
                 }
             }catch (IOException e){
                 e.printStackTrace();
             }catch (InterruptedException e){
+                e.printStackTrace();
+            }catch (ClassNotFoundException e){
                 e.printStackTrace();
             }
 
@@ -78,27 +81,22 @@ public class ClientService implements  AutoCloseable{
         threadEscuta.start();
     }
 
-    public String receberMensagem() throws IOException {
-        try{
-            ByteBuffer responseBuffer = ByteBuffer.allocate(1024);
+    public String receberMensagem() throws IOException, ClassNotFoundException {
 
-            int byteRead = socketChannel.read(responseBuffer);
+        ByteBuffer responseBuffer = ByteBuffer.allocate(1024);
 
-            if(byteRead == -1){
-                System.out.println("Cliente desconectado: " + socketChannel.getRemoteAddress());
-                socketChannel.close();
-            }
-            else if(byteRead > 0){
-                responseBuffer.flip();
-                String mensagem = StandardCharsets.UTF_8.decode(responseBuffer).toString();
-                return mensagem;
-            }
+        int byteRead = socketChannel.read(responseBuffer);
 
-
-        }catch (IOException e){
-            e.printStackTrace();
+        if(byteRead == -1){
+            System.out.println("Cliente desconectado: " + socketChannel.getRemoteAddress());
             socketChannel.close();
         }
+        else if(byteRead > 0){
+            responseBuffer.flip();
+            String mensagem = StandardCharsets.UTF_8.decode(responseBuffer).toString();
+            return mensagem;
+        }
+
 
         return "";
     }
@@ -112,10 +110,36 @@ public class ClientService implements  AutoCloseable{
         }
     }
 
+
+    public Industria receberIndustria() throws IOException, ClassNotFoundException {
+
+        InputStream inStream = Channels.newInputStream(socketChannel);
+        ObjectInputStream in = new ObjectInputStream(inStream);
+
+        return (Industria) in.readObject();
+    }
+
+    public void enviarIndustria(Industria industria){
+        try {
+            OutputStream outputStream = Channels.newOutputStream(socketChannel);
+            ObjectOutputStream out = new ObjectOutputStream(outputStream);
+
+            out.writeObject(industria);
+            out.flush();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     @Override
     public void close() throws Exception{
         if(socketChannel.isOpen()){
             socketChannel.close();
         }
     }
+
+
+
 }
+
+
