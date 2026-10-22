@@ -1,24 +1,25 @@
 package Client.service;
 
-import shared.entity.Industria;
 import javafx.application.Platform;
 import javafx.scene.control.Label;
+import shared.entity.Industria;
 
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.net.ConnectException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-import java.util.Arrays;
 import java.util.Base64;
 
-import static shared.Utils.SerializationUtils.deserialize;
 import static shared.Utils.SerializationUtils.serialize;
 
 public class ClientService implements  AutoCloseable{
@@ -44,11 +45,17 @@ public class ClientService implements  AutoCloseable{
             System.out.println("Conexão Estabelecida com o Servidor da Secretária");
         }catch (UnknownHostException e){
             e.printStackTrace();
-        }catch (IOException e){
+        } catch (ConnectException e){
+            System.out.println("Não foi possível estabelecer conexão com o servidor");
+        } catch (IOException e){
             e.printStackTrace();
         }
+
     }
 
+    public boolean isConected(){
+        return socketChannel.isConnected();
+    }
 
     public void escutarServidor(Label label){
         Thread threadEscuta = new Thread( () -> {
@@ -57,8 +64,10 @@ public class ClientService implements  AutoCloseable{
                 while (true){
                     Thread.sleep(1000);
 
+                        if(!socketChannel.isConnected()) return;
+
                         String mensagem = receberMensagem();
-                        if(mensagem.isEmpty()) continue;
+                        if(mensagem.isEmpty() ) continue;
                         Platform.runLater(() -> {
                             label.setText(label.getText() + "\n======Mensagem recebida======\n" + mensagem + "\n");
                         });
@@ -89,7 +98,7 @@ public class ClientService implements  AutoCloseable{
         } catch (IOException e) {
             System.out.println("Conexão com o servidor foi perdida.");
             socketChannel.close();
-            return "";
+            return null;
         }
 
         if(bytesRead <= 0){
@@ -128,11 +137,15 @@ public class ClientService implements  AutoCloseable{
 
             Industria industria = receberIndustria(tamanhoObjeto);
 
-            String textoDestino = FileSystems.getDefault().getPath("").toAbsolutePath() + "\\src\\main\\java\\Client\\" + industria.getNomeImagem();
 
-            Path destino = Path.of(textoDestino);
+            if(industria.getImagem().toPath().endsWith(".jpg")){
+                String textoDestino = FileSystems.getDefault().getPath("").toAbsolutePath() + "\\src\\main\\java\\Client\\" + industria.getNomeImagem();
 
-            Files.copy(industria.getImagem().toPath(), destino, StandardCopyOption.REPLACE_EXISTING);
+                Path destino = Path.of(textoDestino);
+
+                Files.copy(industria.getImagem().toPath(), destino, StandardCopyOption.REPLACE_EXISTING);
+            }
+
 
             return industria.toString();
 
@@ -182,7 +195,14 @@ public class ClientService implements  AutoCloseable{
 
         File file = new File(Path.of("").toAbsolutePath().toString()+ "\\src\\main\\java\\Client\\"+origem);
 
-        return Files.readAllBytes(file.toPath());
+        byte[] dadosImagem;
+        try {
+            dadosImagem = Files.readAllBytes(file.toPath());
+        }catch (NoSuchFileException e){
+            dadosImagem = null;
+        }
+
+        return dadosImagem;
     }
 
 

@@ -10,6 +10,7 @@ import shared.entity.enums.NiveisPoluicao;
 
 import java.io.*;
 import java.net.InetSocketAddress;
+import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.nio.charset.StandardCharsets;
@@ -104,7 +105,9 @@ public class ServerService implements AutoCloseable {
 
                         SocketChannel clientChannel = (SocketChannel) key.channel();
 
-                        verificaRequisicao(clientChannel);
+                        if(!verificaRequisicao(clientChannel)){
+                            fecharConexao(key, clientChannel);
+                        }
                     }
 
                 }
@@ -120,20 +123,38 @@ public class ServerService implements AutoCloseable {
         }
     }
 
-    public void verificaRequisicao(SocketChannel client) throws ClassNotFoundException, IOException {
+    public void fecharConexao(SelectionKey key, SocketChannel client){
 
+        try{
+            key.cancel();
 
+            if(client != null){
+                client.close();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
-            String mensagem = receberMensagem(client);
+    }
+
+    public boolean verificaRequisicao(SocketChannel client) throws ClassNotFoundException, IOException {
+
+        String mensagem = receberMensagem(client);
+
 
         if (mensagem != null && mensagem.startsWith("Cadastrar")) {
 
             cadastrarIndustria(mensagem, client);
-
+            return true;
         }else if (mensagem != null && mensagem.startsWith("Consultar")){
-
             consultarindustria(mensagem, client);
+            return true;
+        } else if (mensagem == null) {
+            return false;
         }
+
+        enviarMensagem("Não foi possivel indentificar o motivo da requisição", client);
+        return true;
     }
 
     public void consultarindustria(String mensagem, SocketChannel client){
@@ -150,8 +171,7 @@ public class ServerService implements AutoCloseable {
     }
 
     public void cadastrarIndustria(String mensagem, SocketChannel client) throws IOException {
-        System.out.println("Mensagem Recebida: " + mensagem.substring(0,100));
-        String regex = "Cadastrar Nome:(.*?) Local:(.*?) Detalhes:(.*?) NivelPoluição:(.*?) Imagem:(.*?) DadosImagem:(.*)";
+        String regex = "Cadastrar Nome:(.*?) Local:(.*?) Detalhes:(.*?) NivelPoluição:(.*?) Imagem:(.*?)(?: DadosImagem:(.*))?";
         java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(regex);
         java.util.regex.Matcher matcher = pattern.matcher(mensagem);
 
@@ -172,15 +192,16 @@ public class ServerService implements AutoCloseable {
 
             industria.setNomeImagem(matcher.group(5).trim());
 
-            byte[] imagem = Base64.getDecoder().decode(matcher.group(6).trim());
+            if(matcher.group(6) != null){
+                byte[] imagem = Base64.getDecoder().decode(matcher.group(6).trim());
+                String diretorioImagem = FileSystems.getDefault().getPath("").toAbsolutePath() + "\\src\\main\\java\\Server\\dados\\" + industria.getNomeImagem();
 
-            String diretorioImagem = FileSystems.getDefault().getPath("").toAbsolutePath() + "\\src\\main\\java\\Server\\dados\\" + industria.getNomeImagem();
+                File file = new File(diretorioImagem);
 
-            File file = new File(diretorioImagem);
+                Files.write(file.toPath(), imagem);
 
-            Files.write(file.toPath(), imagem);
-
-            industria.setImagem(file);
+                industria.setImagem(file);
+            }
 
             if (!industria.validarCampos()) {
                 enviarMensagem("Não foi possivel realizar o cadastro, um dos campos estava vazio", client);
@@ -233,8 +254,9 @@ public class ServerService implements AutoCloseable {
     public Industria obterIndustria(String nome){
         return industrias.stream().filter(c -> c.getNome().contains(nome)).findFirst().orElse(null);
     }
-    public String receberMensagem(SocketChannel client) throws IOException {
+    public String receberMensagem(SocketChannel client) {
 
+        try{
             ByteBuffer tipoBuffer = ByteBuffer.allocate(1);
 
             int byteRead = client.read(tipoBuffer);
@@ -261,8 +283,15 @@ public class ServerService implements AutoCloseable {
                     return StandardCharsets.UTF_8.decode(textoBuffer).toString();
                 }
             }
+        } catch (SocketException e){
+            System.out.println("Conexão perdida com o usuário");
+            return null;
+        } catch (IOException e){
+            e.printStackTrace();
+        }
 
-        return "";
+
+        return null;
     }
 
     public void enviarMensagem(String mensagem, SocketChannel client){

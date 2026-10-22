@@ -12,7 +12,7 @@ public class Industria implements Serializable {
     private String detalhes;
     private NiveisPoluicao nivelPoluicao;
     private String nomeImagem;
-    private File imagem;
+    private File imagem = null;
 
     public String getNome() {
         return nome;

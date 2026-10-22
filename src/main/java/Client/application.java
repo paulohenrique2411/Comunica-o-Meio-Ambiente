@@ -18,6 +18,9 @@ public class application extends Application {
 
         ClientService clientService = new ClientService(8080);
 
+        if(!clientService.isConected()) return;
+
+
         Label label = new Label();
 
         clientService.escutarServidor(label);
