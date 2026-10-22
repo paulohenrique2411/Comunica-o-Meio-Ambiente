@@ -57,7 +57,7 @@ public class ClientService implements  AutoCloseable{
         return socketChannel.isConnected();
     }
 
-    public void escutarServidor(Label label){
+    public void escutarServidor(MensagemListener listener){
         Thread threadEscuta = new Thread( () -> {
 
             try{
@@ -68,12 +68,8 @@ public class ClientService implements  AutoCloseable{
 
                         String mensagem = receberMensagem();
                         if(mensagem.isEmpty() ) continue;
-                        Platform.runLater(() -> {
-                            label.setText(label.getText() + "\n======Mensagem recebida======\n" + mensagem + "\n");
-                        });
 
-
-
+                        listener.onMensagemrecebida(mensagem);
 
                 }
             }catch (IOException e){
@@ -106,8 +102,6 @@ public class ClientService implements  AutoCloseable{
         }
         tipoBuffer.flip();
         byte tipomensagem = tipoBuffer.get();
-
-        System.out.println("TIPO MENSAGEM " + tipomensagem);
 
         if(tipomensagem == 1){
 
@@ -182,6 +176,7 @@ public class ClientService implements  AutoCloseable{
         } catch (IOException e) {
             e.printStackTrace();
         }
+
     }
 
     public byte[] verificaAnexo(String mensagem) throws IOException {

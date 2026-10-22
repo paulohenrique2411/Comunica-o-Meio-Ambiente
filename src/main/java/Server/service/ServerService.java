@@ -1,38 +1,43 @@
 package Server.service;
 
+import Server.repository.IndustriaRepository;
 import shared.entity.Industria;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import shared.entity.enums.NiveisPoluicao;
 
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
-import java.nio.channels.*;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.util.*;
+
 
 import static shared.Utils.SerializationUtils.deserialize;
 import static shared.Utils.SerializationUtils.serialize;
 
 public class ServerService implements AutoCloseable {
 
-    private String arquivoInfo = "Informacoes.json";
+    private IndustriaRepository industriaRepository;
     private String diretorio;
     private static int PORTA = 8080;
     private Selector selector;
     private ServerSocketChannel server;
     private List<SocketChannel> clients = new ArrayList<>();
     private List<Industria>    industrias = new ArrayList<>();
+    private ProcessarComandos processarComandos;
 
     public ServerService(String diretorio){
         this.diretorio = diretorio;
+        industriaRepository = new IndustriaRepository(diretorio);
+        industrias = industriaRepository.carregarIndustrias();
+
         try {
             selector = Selector.open();
             server = ServerSocketChannel.open();
@@ -51,21 +56,8 @@ public class ServerService implements AutoCloseable {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-    }
 
-    public void carregarIndustrias(){
-        try(FileReader file = new FileReader(diretorio + arquivoInfo)){
-
-            ObjectMapper mapper = new ObjectMapper();
-
-            industrias = mapper.readValue(file, new TypeReference<List<Industria>>() {});
-
-
-        }catch (FileNotFoundException e){
-            e.printStackTrace();
-        }catch(IOException e){
-            e.printStackTrace();
-        }
+        this.processarComandos = new ProcessarComandos(industriaRepository, diretorio, industrias);
     }
 
     public void run(){
@@ -137,123 +129,18 @@ public class ServerService implements AutoCloseable {
 
     }
 
-    public boolean verificaRequisicao(SocketChannel client) throws ClassNotFoundException, IOException {
+    public boolean  verificaRequisicao(SocketChannel client) throws ClassNotFoundException, IOException {
 
         String mensagem = receberMensagem(client);
 
+        if(mensagem == null) return false;
 
-        if (mensagem != null && mensagem.startsWith("Cadastrar")) {
+        String resposta = processarComandos.processar(mensagem, client);
+        enviarMensagem(resposta,client);
 
-            cadastrarIndustria(mensagem, client);
-            return true;
-        }else if (mensagem != null && mensagem.startsWith("Consultar")){
-            consultarindustria(mensagem, client);
-            return true;
-        } else if (mensagem == null) {
-            return false;
-        }
-
-        enviarMensagem("Não foi possivel indentificar o motivo da requisição", client);
         return true;
     }
 
-    public void consultarindustria(String mensagem, SocketChannel client){
-        String[] dados = mensagem.split(" ");
-        Industria industria = obterIndustria(dados[1]);
-
-        if (industria == null) {
-            enviarMensagem("Não foi possivel achar uma industria com os dados fornecidos.", client);
-        } else {
-            File file = new File(diretorio + industria.getNomeImagem());
-            industria.setImagem(file);
-            enviarIndustria(industria, client);
-        }
-    }
-
-    public void cadastrarIndustria(String mensagem, SocketChannel client) throws IOException {
-        String regex = "Cadastrar Nome:(.*?) Local:(.*?) Detalhes:(.*?) NivelPoluição:(.*?) Imagem:(.*?)(?: DadosImagem:(.*))?";
-        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(regex);
-        java.util.regex.Matcher matcher = pattern.matcher(mensagem);
-
-        if (matcher.find()) {
-            Industria industria = new Industria();
-
-            industria.setNome(matcher.group(1).trim());
-            industria.setLocal(matcher.group(2).trim());
-            industria.setDetalhes(matcher.group(3).trim());
-
-            try {
-                String nivelStr = matcher.group(4).trim().toUpperCase();
-                industria.setNivelPoluicao(NiveisPoluicao.valueOf(nivelStr));
-            } catch (IllegalArgumentException e) {
-                enviarMensagem("Erro: Nível de poluição inválido.", client);
-                return;
-            }
-
-            industria.setNomeImagem(matcher.group(5).trim());
-
-            if(matcher.group(6) != null){
-                byte[] imagem = Base64.getDecoder().decode(matcher.group(6).trim());
-                String diretorioImagem = FileSystems.getDefault().getPath("").toAbsolutePath() + "\\src\\main\\java\\Server\\dados\\" + industria.getNomeImagem();
-
-                File file = new File(diretorioImagem);
-
-                Files.write(file.toPath(), imagem);
-
-                industria.setImagem(file);
-            }
-
-            if (!industria.validarCampos()) {
-                enviarMensagem("Não foi possivel realizar o cadastro, um dos campos estava vazio", client);
-                return;
-            }
-
-            InserirIndustriaJson(industria);
-            industrias.add(industria);
-            enviarMensagem("Cadastro realizado com sucesso", client);
-        } else {
-            enviarMensagem("Erro: Formato de mensagem inválido. Preencha todos os campos corretamente.", client);
-        }
-    }
-
-    public void InserirIndustriaJson(Industria industria){
-
-            File file = new File(diretorio + arquivoInfo);
-
-            ObjectMapper mapper = new ObjectMapper();
-
-            mapper.enable(SerializationFeature.INDENT_OUTPUT);
-
-            try{
-                ArrayNode listaIndustrias;
-
-                if(file.exists() && file.length() > 0){
-                    listaIndustrias = (ArrayNode) mapper.readTree(file);
-                }else{
-                    listaIndustrias = mapper.createArrayNode();
-                }
-                ObjectNode novaIndustria = mapper.createObjectNode();
-
-                novaIndustria.put("nome", industria.getNome());
-                novaIndustria.put("local", industria.getLocal());
-                novaIndustria.put("detalhes", industria.getDetalhes());
-                novaIndustria.put("nivelPoluicao", industria.getNivelPoluicao().ordinal());
-                novaIndustria.put("nomeImagem", industria.getNomeImagem());
-
-                listaIndustrias.add(novaIndustria);
-
-                mapper.writeValue(file, listaIndustrias);
-
-            }
-            catch (IOException e){
-            e.printStackTrace();
-            }
-
-    }
-
-    public Industria obterIndustria(String nome){
-        return industrias.stream().filter(c -> c.getNome().contains(nome)).findFirst().orElse(null);
-    }
     public String receberMensagem(SocketChannel client) {
 
         try{
