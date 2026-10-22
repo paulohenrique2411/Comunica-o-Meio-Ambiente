@@ -1,6 +1,6 @@
 package Client.service;
 
-import Server.entity.Industria;
+import shared.entity.Industria;
 import javafx.application.Platform;
 import javafx.scene.control.Label;
 
@@ -14,7 +14,12 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
-import java.util.Scanner;
+import java.nio.file.*;
+import java.util.Arrays;
+import java.util.Base64;
+
+import static shared.Utils.SerializationUtils.deserialize;
+import static shared.Utils.SerializationUtils.serialize;
 
 public class ClientService implements  AutoCloseable{
 
@@ -52,18 +57,12 @@ public class ClientService implements  AutoCloseable{
                 while (true){
                     Thread.sleep(1000);
 
-                    try {
                         String mensagem = receberMensagem();
                         if(mensagem.isEmpty()) continue;
                         Platform.runLater(() -> {
                             label.setText(label.getText() + "\n======Mensagem recebida======\n" + mensagem + "\n");
                         });
-                    }catch (IOException e){
-                        Industria industria = receberIndustria();
-                        Platform.runLater(() -> {
-                            label.setText(label.getText() + "\n======Mensagem recebida======\n" + industria.toString() + "\n");
-                        });
-                    }
+
 
 
 
@@ -83,49 +82,139 @@ public class ClientService implements  AutoCloseable{
 
     public String receberMensagem() throws IOException, ClassNotFoundException {
 
-        ByteBuffer responseBuffer = ByteBuffer.allocate(1024);
-
-        int byteRead = socketChannel.read(responseBuffer);
-
-        if(byteRead == -1){
-            System.out.println("Cliente desconectado: " + socketChannel.getRemoteAddress());
+        ByteBuffer tipoBuffer = ByteBuffer.allocate(1);
+        int bytesRead = 0;
+        try{
+            bytesRead = socketChannel.read(tipoBuffer);
+        } catch (IOException e) {
+            System.out.println("Conexão com o servidor foi perdida.");
             socketChannel.close();
-        }
-        else if(byteRead > 0){
-            responseBuffer.flip();
-            String mensagem = StandardCharsets.UTF_8.decode(responseBuffer).toString();
-            return mensagem;
+            return "";
         }
 
+        if(bytesRead <= 0){
+            return "";
+        }
+        tipoBuffer.flip();
+        byte tipomensagem = tipoBuffer.get();
 
-        return "";
+        System.out.println("TIPO MENSAGEM " + tipomensagem);
+
+        if(tipomensagem == 1){
+
+          ByteBuffer tamanhoBuffer = ByteBuffer.allocate(4);
+
+          while (tamanhoBuffer.hasRemaining()) socketChannel.read(tamanhoBuffer);
+
+          tamanhoBuffer.flip();
+          int tamanhoTexto = tamanhoBuffer.getInt();
+
+          ByteBuffer textoBuffer = ByteBuffer.allocate(tamanhoTexto);
+
+          while (textoBuffer.hasRemaining()) socketChannel.read(textoBuffer);
+          textoBuffer.flip();
+
+
+          return StandardCharsets.UTF_8.decode(textoBuffer).toString();
+
+        }else if(tipomensagem == 2){
+
+            ByteBuffer tamanhoBuffer = ByteBuffer.allocate(4);
+
+            while (tamanhoBuffer.hasRemaining()) socketChannel.read(tamanhoBuffer);
+            tamanhoBuffer.flip();
+
+            int tamanhoObjeto = tamanhoBuffer.getInt();
+
+            Industria industria = receberIndustria(tamanhoObjeto);
+
+            String textoDestino = FileSystems.getDefault().getPath("").toAbsolutePath() + "\\src\\main\\java\\Client\\" + industria.getNomeImagem();
+
+            Path destino = Path.of(textoDestino);
+
+            Files.copy(industria.getImagem().toPath(), destino, StandardCopyOption.REPLACE_EXISTING);
+
+            return industria.toString();
+
+        }else{
+            return "Erro: Tipo de mensagem desconhecido (" + tipomensagem + ")";
+        }
+
     }
 
     public void enviarMensagem(String mensagem){
         try {
-            ByteBuffer outBuffer = ByteBuffer.wrap((mensagem).getBytes());
-            socketChannel.write(outBuffer);
+            byte[] dadosImagem =  verificaAnexo(mensagem);
+            byte[] textoBytes;
+            if(dadosImagem != null){
+                String imagemBase64 = Base64.getEncoder().encodeToString(dadosImagem);
+                mensagem += " DadosImagem:" + imagemBase64;
+                textoBytes = mensagem.getBytes(StandardCharsets.UTF_8);
+            }else{
+                textoBytes = mensagem.getBytes(StandardCharsets.UTF_8);
+            }
+
+
+
+
+            ByteBuffer outBuffer = ByteBuffer.allocate(1 + 4 + textoBytes.length);
+
+            outBuffer.put((byte) 1);
+            outBuffer.putInt(textoBytes.length);
+            outBuffer.put(textoBytes);
+            outBuffer.flip();
+
+            while (outBuffer.hasRemaining()) socketChannel.write(outBuffer);
+
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
+    public byte[] verificaAnexo(String mensagem) throws IOException {
+        int idxImagem = mensagem.indexOf("Imagem");
 
-    public Industria receberIndustria() throws IOException, ClassNotFoundException {
+        if(idxImagem == -1){
+            return null;
+        }
 
-        InputStream inStream = Channels.newInputStream(socketChannel);
-        ObjectInputStream in = new ObjectInputStream(inStream);
+        String origem = mensagem.substring(idxImagem + 7);
 
-        return (Industria) in.readObject();
+        File file = new File(Path.of("").toAbsolutePath().toString()+ "\\src\\main\\java\\Client\\"+origem);
+
+        return Files.readAllBytes(file.toPath());
+    }
+
+
+    public Industria receberIndustria(int objectSize) throws IOException, ClassNotFoundException {
+
+        ByteBuffer dataBuffer = ByteBuffer.allocate(objectSize);
+
+        while (dataBuffer.hasRemaining()){
+            if(socketChannel.read(dataBuffer) == -1) throw new IOException("Conexão interrompida");
+        }
+        dataBuffer.flip();
+
+        ByteArrayInputStream bais = new ByteArrayInputStream(dataBuffer.array());
+        ObjectInputStream ois = new ObjectInputStream(bais);
+
+        return (Industria) ois.readObject();
     }
 
     public void enviarIndustria(Industria industria){
         try {
-            OutputStream outputStream = Channels.newOutputStream(socketChannel);
-            ObjectOutputStream out = new ObjectOutputStream(outputStream);
+            byte [] objectBytes = serialize(industria);
 
-            out.writeObject(industria);
-            out.flush();
+            ByteBuffer buffer = ByteBuffer.allocate(1 + 4 + objectBytes.length);
+            buffer.put((byte) 2);
+            buffer.putInt(objectBytes.length);
+            buffer.put(objectBytes);
+            buffer.flip();
+
+            while (buffer.hasRemaining()){
+                socketChannel.write(buffer);
+            }
+
         } catch (IOException e) {
             e.printStackTrace();
         }

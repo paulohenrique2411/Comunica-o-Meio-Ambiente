@@ -1,22 +1,24 @@
 package Server.service;
 
-import Server.entity.Industria;
-import Server.entity.enums.NiveisPoluicao;
+import shared.entity.Industria;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import shared.entity.enums.NiveisPoluicao;
 
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.util.*;
+
+import static shared.Utils.SerializationUtils.deserialize;
+import static shared.Utils.SerializationUtils.serialize;
 
 public class ServerService implements AutoCloseable {
 
@@ -121,39 +123,79 @@ public class ServerService implements AutoCloseable {
     public void verificaRequisicao(SocketChannel client) throws ClassNotFoundException, IOException {
 
 
-        try{
+
             String mensagem = receberMensagem(client);
-            String[] nome = mensagem.split(" ");
-            Industria industria = consultaIndustria(nome[1]);
+
+        if (mensagem != null && mensagem.startsWith("Cadastrar")) {
+
+            cadastrarIndustria(mensagem, client);
+
+        }else if (mensagem != null && mensagem.startsWith("Consultar")){
+
+            consultarindustria(mensagem, client);
+        }
+    }
+
+    public void consultarindustria(String mensagem, SocketChannel client){
+        String[] dados = mensagem.split(" ");
+        Industria industria = obterIndustria(dados[1]);
+
+        if (industria == null) {
+            enviarMensagem("Não foi possivel achar uma industria com os dados fornecidos.", client);
+        } else {
             File file = new File(diretorio + industria.getNomeImagem());
             industria.setImagem(file);
+            enviarIndustria(industria, client);
+        }
+    }
 
-            if (industria.equals(null)) {
-                enviarMensagem("Não foi possivel achar uma industria com os dados fornecidos.", client);
-            } else {
-                enviarIndustria(industria, client);
+    public void cadastrarIndustria(String mensagem, SocketChannel client) throws IOException {
+        System.out.println("Mensagem Recebida: " + mensagem.substring(0,100));
+        String regex = "Cadastrar Nome:(.*?) Local:(.*?) Detalhes:(.*?) NivelPoluição:(.*?) Imagem:(.*?) DadosImagem:(.*)";
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(regex);
+        java.util.regex.Matcher matcher = pattern.matcher(mensagem);
+
+        if (matcher.find()) {
+            Industria industria = new Industria();
+
+            industria.setNome(matcher.group(1).trim());
+            industria.setLocal(matcher.group(2).trim());
+            industria.setDetalhes(matcher.group(3).trim());
+
+            try {
+                String nivelStr = matcher.group(4).trim().toUpperCase();
+                industria.setNivelPoluicao(NiveisPoluicao.valueOf(nivelStr));
+            } catch (IllegalArgumentException e) {
+                enviarMensagem("Erro: Nível de poluição inválido.", client);
+                return;
             }
-        }catch (IOException e){
-            Industria industria = receberIndustria(client);
 
-            if (industria.validarCampos()){
+            industria.setNomeImagem(matcher.group(5).trim());
+
+            byte[] imagem = Base64.getDecoder().decode(matcher.group(6).trim());
+
+            String diretorioImagem = FileSystems.getDefault().getPath("").toAbsolutePath() + "\\src\\main\\java\\Server\\dados\\" + industria.getNomeImagem();
+
+            File file = new File(diretorioImagem);
+
+            Files.write(file.toPath(), imagem);
+
+            industria.setImagem(file);
+
+            if (!industria.validarCampos()) {
                 enviarMensagem("Não foi possivel realizar o cadastro, um dos campos estava vazio", client);
+                return;
             }
-            cadastrarIndustria(industria);
+
+            InserirIndustriaJson(industria);
+            industrias.add(industria);
             enviarMensagem("Cadastro realizado com sucesso", client);
+        } else {
+            enviarMensagem("Erro: Formato de mensagem inválido. Preencha todos os campos corretamente.", client);
         }
-
     }
 
-    public String obterValor(String valor, String mensagem){
-        if(mensagem.contains(valor)){
-            int index = mensagem.indexOf(valor);
-            return mensagem.substring(index+valor.length()+1, (mensagem.indexOf(" ", index) == -1)? mensagem.length() : mensagem.indexOf(" ", index) );
-        }
-        return "";
-    }
-
-    public void cadastrarIndustria(Industria industria){
+    public void InserirIndustriaJson(Industria industria){
 
             File file = new File(diretorio + arquivoInfo);
 
@@ -175,7 +217,7 @@ public class ServerService implements AutoCloseable {
                 novaIndustria.put("local", industria.getLocal());
                 novaIndustria.put("detalhes", industria.getDetalhes());
                 novaIndustria.put("nivelPoluicao", industria.getNivelPoluicao().ordinal());
-                novaIndustria.put("imagem", industria.getNomeImagem());
+                novaIndustria.put("nomeImagem", industria.getNomeImagem());
 
                 listaIndustrias.add(novaIndustria);
 
@@ -188,53 +230,89 @@ public class ServerService implements AutoCloseable {
 
     }
 
-    public Industria consultaIndustria(String nome){
+    public Industria obterIndustria(String nome){
         return industrias.stream().filter(c -> c.getNome().contains(nome)).findFirst().orElse(null);
     }
     public String receberMensagem(SocketChannel client) throws IOException {
 
-            ByteBuffer responseBuffer = ByteBuffer.allocate(1024);
+            ByteBuffer tipoBuffer = ByteBuffer.allocate(1);
 
-            int byteRead = client.read(responseBuffer);
+            int byteRead = client.read(tipoBuffer);
 
             if(byteRead == -1){
                 System.out.println("Cliente desconectado: " + client.getRemoteAddress());
                 client.close();
             }
             else if(byteRead > 0){
-                responseBuffer.flip();
-                String mensagem = StandardCharsets.UTF_8.decode(responseBuffer).toString();
-                return mensagem;
-            }
+                tipoBuffer.flip();
 
+                byte tipoMensagem = tipoBuffer.get();
+
+                if(tipoMensagem == 1){
+                    ByteBuffer tamanhoBuffer = ByteBuffer.allocate(4);
+                    while (tamanhoBuffer.hasRemaining()) client.read(tamanhoBuffer);
+                    tamanhoBuffer.flip();
+                    int tamanho = tamanhoBuffer.getInt();
+
+                    ByteBuffer textoBuffer = ByteBuffer.allocate(tamanho);
+                    while (textoBuffer.hasRemaining()) client.read(textoBuffer);
+                    textoBuffer.flip();
+
+                    return StandardCharsets.UTF_8.decode(textoBuffer).toString();
+                }
+            }
 
         return "";
     }
 
     public void enviarMensagem(String mensagem, SocketChannel client){
         try {
-            ByteBuffer outBuffer = ByteBuffer.wrap((mensagem).getBytes());
-            client.write(outBuffer);
+            byte[] textoBytes = mensagem.getBytes(StandardCharsets.UTF_8);
+            ByteBuffer outBuffer = ByteBuffer.allocate(1 + 4 + textoBytes.length);
+            outBuffer.put((byte) 1);
+            outBuffer.putInt(textoBytes.length);
+            outBuffer.put(textoBytes);
+
+            outBuffer.flip();
+
+            while(outBuffer.hasRemaining()) client.write(outBuffer);
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
     public Industria receberIndustria(SocketChannel client) throws IOException, ClassNotFoundException {
+        ByteBuffer sizeBuffer = ByteBuffer.allocate(4);
+        while (sizeBuffer.hasRemaining()){
+            if(client.read(sizeBuffer) == -1) throw new IOException("Conexão encerrada.");
+        }
+        sizeBuffer.flip();
+        int objectSize = sizeBuffer.getInt();
 
-        InputStream inStream = Channels.newInputStream(client);
-        ObjectInputStream in = new ObjectInputStream(inStream);
+        ByteBuffer dataBuffer = ByteBuffer.allocate(objectSize);
+        while (dataBuffer.hasRemaining()){
+            if(client.read(dataBuffer) == -1) throw new IOException("Conexão interrompida.");
+        }
 
-        return (Industria) in.readObject();
+        dataBuffer.flip();
+
+        return (Industria) deserialize(dataBuffer.array());
     }
 
     public void enviarIndustria(Industria industria, SocketChannel client){
         try {
-            OutputStream outputStream = Channels.newOutputStream(client);
-            ObjectOutputStream out = new ObjectOutputStream(outputStream);
+            byte [] objectBytes = serialize(industria);
 
-            out.writeObject(industria);
-            out.flush();
+            ByteBuffer buffer = ByteBuffer.allocate(1 + 4 + objectBytes.length);
+            buffer.put((byte) 2);
+            buffer.putInt(objectBytes.length);
+            buffer.put(objectBytes);
+            buffer.flip();
+
+            while (buffer.hasRemaining()){
+                client.write(buffer);
+            }
+
         } catch (IOException e) {
             e.printStackTrace();
         }

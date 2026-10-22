@@ -1,4 +1,4 @@
-package Server.entity.enums;
+package shared.entity.enums;
 
 public enum NiveisPoluicao {
     BAIXO,

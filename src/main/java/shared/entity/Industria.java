@@ -1,7 +1,6 @@
-package Server.entity;
+package shared.entity;
 
-import Server.entity.enums.NiveisPoluicao;
-import com.fasterxml.jackson.databind.JsonNode;
+import shared.entity.enums.NiveisPoluicao;
 
 import java.io.File;
 import java.io.Serializable;
@@ -76,6 +75,6 @@ public class Industria implements Serializable {
                 "Local = " + local + '\n' +
                 "Detalhes = " + detalhes + '\n' +
                 "Nivel Poluicao = " + nivelPoluicao.toString() + '\n' +
-                "imagem = " + imagem;
+                "imagem = " + nomeImagem;
     }
 }
