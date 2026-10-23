@@ -136,7 +136,7 @@ public class ServerService implements AutoCloseable {
         Object resposta = processarComandos.processar(mensagem, client);
 
         if(resposta instanceof  String){
-            enviarMensagem((String) mensagem,client);
+            enviarMensagem((String) resposta,client);
         } else if (resposta instanceof Industria) {
             enviarIndustria((Industria) resposta, client);
         }
