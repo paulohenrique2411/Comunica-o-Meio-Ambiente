@@ -103,6 +103,8 @@ public class ClientService implements  AutoCloseable{
         tipoBuffer.flip();
         byte tipomensagem = tipoBuffer.get();
 
+        System.out.println("Mensagem recebida tipo: " + tipomensagem);
+
         if(tipomensagem == 1){
 
           ByteBuffer tamanhoBuffer = ByteBuffer.allocate(4);
@@ -131,15 +133,13 @@ public class ClientService implements  AutoCloseable{
 
             Industria industria = receberIndustria(tamanhoObjeto);
 
-
-            if(industria.getImagem().toPath().endsWith(".jpg")){
+            if(industria.getImagem().exists()){
                 String textoDestino = FileSystems.getDefault().getPath("").toAbsolutePath() + "\\src\\main\\java\\Client\\" + industria.getNomeImagem();
 
                 Path destino = Path.of(textoDestino);
 
                 Files.copy(industria.getImagem().toPath(), destino, StandardCopyOption.REPLACE_EXISTING);
             }
-
 
             return industria.toString();
 

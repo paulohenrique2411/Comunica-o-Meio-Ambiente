@@ -23,12 +23,17 @@ public class ProcessarComandos {
         this.diretorio = diretorio;
     }
 
-    public String processar(String mensagem, SocketChannel client){
-        if(mensagem.startsWith("Cadastrar")){
-            return executarCadastro(mensagem);
-        } else if (mensagem.startsWith("Consultar")) {
-            return executarConsulta(mensagem);
+    public Object processar(String mensagem, SocketChannel client ){
+        try {
+            if (mensagem.startsWith("Cadastrar")) {
+                return executarCadastro(mensagem);
+            } else if (mensagem.startsWith("Consultar")) {
+                return executarConsulta(mensagem);
+            }
+        }catch (IOException e){
+            System.out.println("Não foi possivel serializar a industria");
         }
+
         return "Comando desconhecido.";
     }
 
@@ -81,7 +86,7 @@ public class ProcessarComandos {
         }
     }
 
-    private String executarConsulta(String mensagem){
+    private Object executarConsulta(String mensagem) throws IOException {
         String[] dados = mensagem.split(" ");
         Industria industria = obterIndustria(dados[1]);
 
@@ -90,7 +95,7 @@ public class ProcessarComandos {
         } else {
             File file = new File(diretorio + industria.getNomeImagem());
             industria.setImagem(file);
-            return industria.toString();
+            return industria;
         }
     }
 

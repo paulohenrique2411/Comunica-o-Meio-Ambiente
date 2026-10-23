@@ -2,9 +2,7 @@ package Server.service;
 
 import Server.repository.IndustriaRepository;
 import shared.entity.Industria;
-import shared.entity.enums.NiveisPoluicao;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
@@ -14,10 +12,10 @@ import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.util.*;
-
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
 
 import static shared.Utils.SerializationUtils.deserialize;
 import static shared.Utils.SerializationUtils.serialize;
@@ -135,8 +133,13 @@ public class ServerService implements AutoCloseable {
 
         if(mensagem == null) return false;
 
-        String resposta = processarComandos.processar(mensagem, client);
-        enviarMensagem(resposta,client);
+        Object resposta = processarComandos.processar(mensagem, client);
+
+        if(resposta instanceof  String){
+            enviarMensagem((String) mensagem,client);
+        } else if (resposta instanceof Industria) {
+            enviarIndustria((Industria) resposta, client);
+        }
 
         return true;
     }
